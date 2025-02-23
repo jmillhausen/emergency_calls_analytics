@@ -230,22 +230,11 @@
         const BEARER_TOKEN = '12345';
         let chart, zipCodeChart; // Global variables to store chart instances
 
-        // Function to extract ZIP code from address
         function extractZipCode(address) {
-            const usZipMatch = address.match(/\b\d{5}(-\d{4})?\b/);
-            if (usZipMatch) {
-                return usZipMatch[0];
-            }
-            
-            const parts = address.split(',').map(part => part.trim());
-            if (parts.length > 0) {
-                return `Region: ${parts[parts.length - 1]}`;
-            }
-            
-            return 'Unknown';
+            const match = address.match(/\b\d{5}(-\d{4})?\b/);
+            return match ? match[0] : '';
         }
 
-        // Fetch data from API
         async function fetchData() {
             try {
                 const response = await fetch(API_URL, {
@@ -261,13 +250,19 @@
                 }
 
                 const data = await response.json();
-                updateDashboard(data);
+                
+                // Filter to only include records with US ZIP codes
+                const usData = data.filter(record => {
+                    const zipMatch = record.Address.match(/\b\d{5}(-\d{4})?\b/);
+                    return zipMatch !== null;
+                });
+                
+                updateDashboard(usData);
             } catch (error) {
                 console.error('Error fetching data:', error);
             }
         }
 
-        // Update all dashboard components
         function updateDashboard(data) {
             updateStats(data);
             updateDisasterChart(data);
@@ -275,7 +270,6 @@
             populateTable(data);
         }
 
-        // Update statistics
         function updateStats(data) {
             const totalCases = data.length;
             const needHousing = data.filter(d => d.Housing_Needs.toLowerCase() === "yes").length;
@@ -294,7 +288,6 @@
                 `(${((homeStable/totalCases) * 100).toFixed(1)}%)`;
         }
 
-        // Create/Update disaster chart
         function updateDisasterChart(data) {
             const disasterCounts = data.reduce((acc, curr) => {
                 acc[curr.Disaster_type] = (acc[curr.Disaster_type] || 0) + 1;
@@ -312,7 +305,7 @@
                 data: {
                     labels: Object.keys(disasterCounts),
                     datasets: [{
-                        label: 'Number of Cases',
+                        label: 'Disaster Type Distribution',
                         data: Object.values(disasterCounts),
                         backgroundColor: [
                             '#ef4444', // wildfire - red
@@ -323,7 +316,8 @@
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: false,
+                    maintainAspectR
+                    atio: false,
                     scales: {
                         y: {
                             beginAtZero: true,
@@ -331,16 +325,23 @@
                                 stepSize: 1
                             }
                         }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Cases by Disaster Type'
+                        }
                     }
                 }
             });
         }
 
-        // Create/Update ZIP code chart
         function updateZipCodeChart(data) {
             const zipCodeCounts = data.reduce((acc, curr) => {
                 const zipCode = extractZipCode(curr.Address);
-                acc[zipCode] = (acc[zipCode] || 0) + 1;
+                if (zipCode) {
+                    acc[zipCode] = (acc[zipCode] || 0) + 1;
+                }
                 return acc;
             }, {});
 
@@ -372,17 +373,27 @@
                     plugins: {
                         title: {
                             display: true,
-                            text: 'Cases by Location'
+                            text: 'Cases by ZIP Code'
                         },
                         legend: {
                             position: 'right'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || 0;
+                                    const total = context.dataset.data.reduce((acc, curr) => acc + curr, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return `ZIP ${label}: ${value} (${percentage}%)`;
+                                }
+                            }
                         }
                     }
                 }
             });
         }
 
-        // Populate table
         function populateTable(data) {
             const tbody = document.querySelector('#affectedTable tbody');
             tbody.innerHTML = data.map(person => `
@@ -405,7 +416,8 @@
                     <td>
                         <span class="badge ${person.Insurance.toLowerCase() === 'yes' ? 'badge-green' : 'badge-red'}">
                             ${person.Insurance}
-                        </span>
+                        </span
+                        >
                     </td>
                     <td>
                         <span class="badge ${person.Housing_Needs.toLowerCase() === 'yes' ? 'badge-red' : 'badge-green'}">
@@ -417,7 +429,6 @@
             `).join('');
         }
 
-        // Add refresh button
         function addRefreshButton() {
             const header = document.querySelector('.card-header');
             const refreshButton = document.createElement('button');
@@ -436,12 +447,10 @@
             header.appendChild(refreshButton);
         }
 
-        // Auto-refresh setup (every 1 minute)
         function setupAutoRefresh() {
             setInterval(fetchData, 60000); // 60000 ms = 1 minute
         }
 
-        // Initialize dashboard
         document.addEventListener('DOMContentLoaded', () => {
             addRefreshButton();
             fetchData();
