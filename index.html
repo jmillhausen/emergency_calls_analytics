@@ -98,13 +98,6 @@
             position: relative;
         }
 
-        .charts-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 1rem;
-            margin-top: 1rem;
-        }
-
         table {
             width: 100%;
             border-collapse: collapse;
@@ -192,15 +185,10 @@
 
         <div class="card">
             <div class="card-header">
-                <h2 class="card-title">Analytics Overview</h2>
+                <h2 class="card-title">Disaster Type Distribution</h2>
             </div>
-            <div class="charts-grid">
-                <div class="chart-container">
-                    <canvas id="disasterChart"></canvas>
-                </div>
-                <div class="chart-container">
-                    <canvas id="zipCodeChart"></canvas>
-                </div>
+            <div class="chart-container">
+                <canvas id="disasterChart"></canvas>
             </div>
         </div>
 
@@ -217,7 +205,6 @@
                             <th>Housing Status</th>
                             <th>Insurance</th>
                             <th>Needs</th>
-                            <th>ZIP Code</th>
                         </tr>
                     </thead>
                     <tbody></tbody>
@@ -228,13 +215,9 @@
     <script>
         const API_URL = 'https://emea.snaplogic.com/api/1/rest/slsched/feed/ConnectFasterInc/snapLogic4snapLogic/ToolsAsApi/emergency_analytics_api';
         const BEARER_TOKEN = '12345';
-        let chart, zipCodeChart; // Global variables to store chart instances
+        let chart; // Global variable to store chart instance
 
-        function extractZipCode(address) {
-            const match = address.match(/\b\d{5}(-\d{4})?\b/);
-            return match ? match[0] : '';
-        }
-
+        // Fetch data from API
         async function fetchData() {
             try {
                 const response = await fetch(API_URL, {
@@ -250,26 +233,21 @@
                 }
 
                 const data = await response.json();
-                
-                // Filter to only include records with US ZIP codes
-                const usData = data.filter(record => {
-                    const zipMatch = record.Address.match(/\b\d{5}(-\d{4})?\b/);
-                    return zipMatch !== null;
-                });
-                
-                updateDashboard(usData);
+                updateDashboard(data);
             } catch (error) {
                 console.error('Error fetching data:', error);
+                // Handle error gracefully - maybe show an error message on the dashboard
             }
         }
 
+        // Update all dashboard components
         function updateDashboard(data) {
             updateStats(data);
             updateDisasterChart(data);
-            updateZipCodeChart(data);
             populateTable(data);
         }
 
+        // Update statistics
         function updateStats(data) {
             const totalCases = data.length;
             const needHousing = data.filter(d => d.Housing_Needs.toLowerCase() === "yes").length;
@@ -288,6 +266,7 @@
                 `(${((homeStable/totalCases) * 100).toFixed(1)}%)`;
         }
 
+        // Create/Update disaster chart
         function updateDisasterChart(data) {
             const disasterCounts = data.reduce((acc, curr) => {
                 acc[curr.Disaster_type] = (acc[curr.Disaster_type] || 0) + 1;
@@ -296,6 +275,7 @@
 
             const ctx = document.getElementById('disasterChart').getContext('2d');
             
+            // Destroy existing chart if it exists
             if (chart) {
                 chart.destroy();
             }
@@ -305,7 +285,7 @@
                 data: {
                     labels: Object.keys(disasterCounts),
                     datasets: [{
-                        label: 'Disaster Type Distribution',
+                        label: 'Number of Cases',
                         data: Object.values(disasterCounts),
                         backgroundColor: [
                             '#ef4444', // wildfire - red
@@ -316,8 +296,7 @@
                 },
                 options: {
                     responsive: true,
-                    maintainAspectR
-                    atio: false,
+                    maintainAspectRatio: false,
                     scales: {
                         y: {
                             beginAtZero: true,
@@ -325,75 +304,12 @@
                                 stepSize: 1
                             }
                         }
-                    },
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: 'Cases by Disaster Type'
-                        }
                     }
                 }
             });
         }
 
-        function updateZipCodeChart(data) {
-            const zipCodeCounts = data.reduce((acc, curr) => {
-                const zipCode = extractZipCode(curr.Address);
-                if (zipCode) {
-                    acc[zipCode] = (acc[zipCode] || 0) + 1;
-                }
-                return acc;
-            }, {});
-
-            const ctx = document.getElementById('zipCodeChart').getContext('2d');
-            
-            if (zipCodeChart) {
-                zipCodeChart.destroy();
-            }
-
-            zipCodeChart = new Chart(ctx, {
-                type: 'pie',
-                data: {
-                    labels: Object.keys(zipCodeCounts),
-                    datasets: [{
-                        data: Object.values(zipCodeCounts),
-                        backgroundColor: [
-                            '#3b82f6',  // blue
-                            '#ef4444',  // red
-                            '#f97316',  // orange
-                            '#10b981',  // green
-                            '#8b5cf6',  // purple
-                            '#ec4899'   // pink
-                        ]
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: 'Cases by ZIP Code'
-                        },
-                        legend: {
-                            position: 'right'
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const label = context.label || '';
-                                    const value = context.raw || 0;
-                                    const total = context.dataset.data.reduce((acc, curr) => acc + curr, 0);
-                                    const percentage = ((value / total) * 100).toFixed(1);
-                                    return `ZIP ${label}: ${value} (${percentage}%)`;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
+        // Populate table
         function populateTable(data) {
             const tbody = document.querySelector('#affectedTable tbody');
             tbody.innerHTML = data.map(person => `
@@ -416,19 +332,18 @@
                     <td>
                         <span class="badge ${person.Insurance.toLowerCase() === 'yes' ? 'badge-green' : 'badge-red'}">
                             ${person.Insurance}
-                        </span
-                        >
+                        </span>
                     </td>
                     <td>
                         <span class="badge ${person.Housing_Needs.toLowerCase() === 'yes' ? 'badge-red' : 'badge-green'}">
                             Housing: ${person.Housing_Needs}
                         </span>
                     </td>
-                    <td>${extractZipCode(person.Address)}</td>
                 </tr>
             `).join('');
         }
 
+        // Add refresh button
         function addRefreshButton() {
             const header = document.querySelector('.card-header');
             const refreshButton = document.createElement('button');
@@ -447,10 +362,12 @@
             header.appendChild(refreshButton);
         }
 
+        // Auto-refresh setup (every 1 minute)
         function setupAutoRefresh() {
             setInterval(fetchData, 60000); // 60000 ms = 1 minute
         }
 
+        // Initialize dashboard
         document.addEventListener('DOMContentLoaded', () => {
             addRefreshButton();
             fetchData();
