@@ -98,6 +98,13 @@
             position: relative;
         }
 
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -185,10 +192,15 @@
 
         <div class="card">
             <div class="card-header">
-                <h2 class="card-title">Disaster Type Distribution</h2>
+                <h2 class="card-title">Analytics Overview</h2>
             </div>
-            <div class="chart-container">
-                <canvas id="disasterChart"></canvas>
+            <div class="charts-grid">
+                <div class="chart-container">
+                    <canvas id="disasterChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <canvas id="zipCodeChart"></canvas>
+                </div>
             </div>
         </div>
 
@@ -205,6 +217,7 @@
                             <th>Housing Status</th>
                             <th>Insurance</th>
                             <th>Needs</th>
+                            <th>ZIP Code</th>
                         </tr>
                     </thead>
                     <tbody></tbody>
@@ -215,7 +228,22 @@
     <script>
         const API_URL = 'https://emea.snaplogic.com/api/1/rest/slsched/feed/ConnectFasterInc/snapLogic4snapLogic/ToolsAsApi/emergency_analytics_api';
         const BEARER_TOKEN = '12345';
-        let chart; // Global variable to store chart instance
+        let chart, zipCodeChart; // Global variables to store chart instances
+
+        // Function to extract ZIP code from address
+        function extractZipCode(address) {
+            const usZipMatch = address.match(/\b\d{5}(-\d{4})?\b/);
+            if (usZipMatch) {
+                return usZipMatch[0];
+            }
+            
+            const parts = address.split(',').map(part => part.trim());
+            if (parts.length > 0) {
+                return `Region: ${parts[parts.length - 1]}`;
+            }
+            
+            return 'Unknown';
+        }
 
         // Fetch data from API
         async function fetchData() {
@@ -236,7 +264,6 @@
                 updateDashboard(data);
             } catch (error) {
                 console.error('Error fetching data:', error);
-                // Handle error gracefully - maybe show an error message on the dashboard
             }
         }
 
@@ -244,6 +271,7 @@
         function updateDashboard(data) {
             updateStats(data);
             updateDisasterChart(data);
+            updateZipCodeChart(data);
             populateTable(data);
         }
 
@@ -275,7 +303,6 @@
 
             const ctx = document.getElementById('disasterChart').getContext('2d');
             
-            // Destroy existing chart if it exists
             if (chart) {
                 chart.destroy();
             }
@@ -303,6 +330,52 @@
                             ticks: {
                                 stepSize: 1
                             }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Create/Update ZIP code chart
+        function updateZipCodeChart(data) {
+            const zipCodeCounts = data.reduce((acc, curr) => {
+                const zipCode = extractZipCode(curr.Address);
+                acc[zipCode] = (acc[zipCode] || 0) + 1;
+                return acc;
+            }, {});
+
+            const ctx = document.getElementById('zipCodeChart').getContext('2d');
+            
+            if (zipCodeChart) {
+                zipCodeChart.destroy();
+            }
+
+            zipCodeChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(zipCodeCounts),
+                    datasets: [{
+                        data: Object.values(zipCodeCounts),
+                        backgroundColor: [
+                            '#3b82f6',  // blue
+                            '#ef4444',  // red
+                            '#f97316',  // orange
+                            '#10b981',  // green
+                            '#8b5cf6',  // purple
+                            '#ec4899'   // pink
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Cases by Location'
+                        },
+                        legend: {
+                            position: 'right'
                         }
                     }
                 }
@@ -339,6 +412,7 @@
                             Housing: ${person.Housing_Needs}
                         </span>
                     </td>
+                    <td>${extractZipCode(person.Address)}</td>
                 </tr>
             `).join('');
         }
