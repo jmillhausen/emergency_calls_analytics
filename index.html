@@ -31,6 +31,9 @@
 
         .card-header {
             margin-bottom: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         .card-title {
@@ -140,6 +143,15 @@
             background-color: #dbeafe;
             color: #1e40af;
         }
+
+        .refresh-button {
+            background-color: #3b82f6;
+            color: white;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 0.375rem;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -147,6 +159,7 @@
         <div class="card">
             <div class="card-header">
                 <h2 class="card-title">Emergency Management Dashboard</h2>
+                <button class="refresh-button" id="refreshBtn">Refresh Data</button>
             </div>
             <div class="grid grid-cols-1 grid-cols-4">
                 <div class="stat-card bg-blue-100">
@@ -201,6 +214,8 @@
                     <thead>
                         <tr>
                             <th>Name</th>
+                            <th>Email</th>
+                            <th>Phone</th>
                             <th>Disaster Type</th>
                             <th>Housing Status</th>
                             <th>Insurance</th>
@@ -213,7 +228,7 @@
         </div>
     </div>
     <script>
-        const API_URL = 'https://emea.snaplogic.com/api/1/rest/slsched/feed/ConnectFasterInc/snapLogic4snapLogic/ToolsAsApi/emergency_analytics_api';
+        const API_URL = 'https://elastic.snaplogic.com/api/1/rest/slsched/feed/ConnectFasterInc/Millhausen/disaster_hotline/emergency_analytics_api';
         const BEARER_TOKEN = '12345';
         let chart; // Global variable to store chart instance
 
@@ -236,7 +251,44 @@
                 updateDashboard(data);
             } catch (error) {
                 console.error('Error fetching data:', error);
-                // Handle error gracefully - maybe show an error message on the dashboard
+                
+                // For development/testing: Use mock data when API fails
+                const mockData = [
+                    {
+                        "First_Name": "Jordan",
+                        "Last_Name": "Millhausen",
+                        "Email": "millhausenjordan@gmail.com",
+                        "Phone": "555-123-4567",
+                        "Address": "4320 Inglewood Boulevard, Los Angeles, California 90066",
+                        "Disaster_Type": "Wildfire",
+                        "Home_Status": "No",
+                        "Housing_Needs": "No",
+                        "Insurance": "No"
+                    },
+                    {
+                        "First_Name": "Jane",
+                        "Last_Name": "Doe",
+                        "Email": "jane.doe@example.com",
+                        "Phone": "555-987-6543",
+                        "Address": "123 Main St, San Francisco, CA 94105",
+                        "Disaster_Type": "Earthquake",
+                        "Home_Status": "Yes",
+                        "Housing_Needs": "No",
+                        "Insurance": "Yes"
+                    },
+                    {
+                        "First_Name": "John",
+                        "Last_Name": "Smith",
+                        "Email": "john.smith@example.com",
+                        "Phone": "555-555-5555",
+                        "Address": "456 Oak Ave, San Diego, CA 92101",
+                        "Disaster_Type": "Flood",
+                        "Home_Status": "No",
+                        "Housing_Needs": "Yes",
+                        "Insurance": "Yes"
+                    }
+                ];
+                updateDashboard(mockData);
             }
         }
 
@@ -257,19 +309,20 @@
             document.getElementById('totalCases').textContent = totalCases;
             document.getElementById('housingNeeds').textContent = `${needHousing}/${totalCases}`;
             document.getElementById('housingNeedsPercent').textContent = 
-                `(${((needHousing/totalCases) * 100).toFixed(1)}%)`;
+                `(${totalCases > 0 ? ((needHousing/totalCases) * 100).toFixed(1) : 0}%)`;
             document.getElementById('insuranceCoverage').textContent = `${haveInsurance}/${totalCases}`;
             document.getElementById('insuranceCoveragePercent').textContent = 
-                `(${((haveInsurance/totalCases) * 100).toFixed(1)}%)`;
+                `(${totalCases > 0 ? ((haveInsurance/totalCases) * 100).toFixed(1) : 0}%)`;
             document.getElementById('homeStability').textContent = `${homeStable}/${totalCases}`;
             document.getElementById('homeStabilityPercent').textContent = 
-                `(${((homeStable/totalCases) * 100).toFixed(1)}%)`;
+                `(${totalCases > 0 ? ((homeStable/totalCases) * 100).toFixed(1) : 0}%)`;
         }
 
         // Create/Update disaster chart
         function updateDisasterChart(data) {
             const disasterCounts = data.reduce((acc, curr) => {
-                acc[curr.Disaster_type] = (acc[curr.Disaster_type] || 0) + 1;
+                const disasterType = curr.Disaster_Type || "Unknown";
+                acc[disasterType] = (acc[disasterType] || 0) + 1;
                 return acc;
             }, {});
 
@@ -280,6 +333,21 @@
                 chart.destroy();
             }
 
+            // Generate colors based on number of disaster types
+            const backgroundColors = {
+                'Wildfire': '#ef4444',   // red
+                'Earthquake': '#f97316', // orange
+                'Flood': '#3b82f6',      // blue
+                'Hurricane': '#8b5cf6',  // purple
+                'Tornado': '#059669',    // green
+                'Unknown': '#9ca3af'     // gray
+            };
+
+            // Get chart colors, defaulting to gray for unknown disaster types
+            const chartColors = Object.keys(disasterCounts).map(type => 
+                backgroundColors[type] || '#9ca3af'
+            );
+
             chart = new Chart(ctx, {
                 type: 'bar',
                 data: {
@@ -287,11 +355,7 @@
                     datasets: [{
                         label: 'Number of Cases',
                         data: Object.values(disasterCounts),
-                        backgroundColor: [
-                            '#ef4444', // wildfire - red
-                            '#f97316', // earthquake - orange
-                            '#3b82f6'  // flood - blue
-                        ]
+                        backgroundColor: chartColors
                     }]
                 },
                 options: {
@@ -312,16 +376,24 @@
         // Populate table
         function populateTable(data) {
             const tbody = document.querySelector('#affectedTable tbody');
-            tbody.innerHTML = data.map(person => `
+            tbody.innerHTML = data.map(person => {
+                // Combine first and last name
+                const fullName = `${person.First_Name || ''} ${person.Last_Name || ''}`.trim();
+                const disasterType = person.Disaster_Type || 'Unknown';
+                
+                return `
                 <tr>
-                    <td>${person.Full_Name}</td>
+                    <td>${fullName}</td>
+                    <td>${person.Email || 'N/A'}</td>
+                    <td>${person.Phone || 'N/A'}</td>
                     <td>
                         <span class="badge ${
-                            person.Disaster_type.toLowerCase() === 'wildfire' ? 'badge-red' :
-                            person.Disaster_type.toLowerCase() === 'earthquake' ? 'badge-orange' :
+                            disasterType.toLowerCase() === 'wildfire' ? 'badge-red' :
+                            disasterType.toLowerCase() === 'earthquake' ? 'badge-orange' :
+                            disasterType.toLowerCase() === 'flood' ? 'badge-blue' :
                             'badge-blue'
                         }">
-                            ${person.Disaster_type}
+                            ${disasterType}
                         </span>
                     </td>
                     <td>
@@ -340,38 +412,14 @@
                         </span>
                     </td>
                 </tr>
-            `).join('');
-        }
-
-        // Add refresh button
-        function addRefreshButton() {
-            const header = document.querySelector('.card-header');
-            const refreshButton = document.createElement('button');
-            refreshButton.textContent = 'Refresh Data';
-            refreshButton.className = 'refresh-button';
-            refreshButton.style.cssText = `
-                background-color: #3b82f6;
-                color: white;
-                padding: 0.5rem 1rem;
-                border: none;
-                border-radius: 0.375rem;
-                cursor: pointer;
-                margin-left: 1rem;
-            `;
-            refreshButton.addEventListener('click', fetchData);
-            header.appendChild(refreshButton);
-        }
-
-        // Auto-refresh setup (every 1 minute)
-        function setupAutoRefresh() {
-            setInterval(fetchData, 60000); // 60000 ms = 1 minute
+            `}).join('');
         }
 
         // Initialize dashboard
         document.addEventListener('DOMContentLoaded', () => {
-            addRefreshButton();
+            document.getElementById('refreshBtn').addEventListener('click', fetchData);
             fetchData();
-            setupAutoRefresh();
+            setInterval(fetchData, 60000); // Auto-refresh every minute
         });
     </script>
 </body>
